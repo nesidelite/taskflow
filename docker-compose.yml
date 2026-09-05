@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Database Service (MySQL 8.0)
+  # ----------------------------------------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: task_tracker_db
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-supersecretrootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-task_tracker}
+      MYSQL_USER: ${MYSQL_USER:-task_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-task_secure_password_123}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - task_tracker_net
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend Service (FastAPI REST API with Python 3.11)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: task_tracker_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      PORT: 8000
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-task_user}:${MYSQL_PASSWORD:-task_secure_password_123}@db:3306/${MYSQL_DATABASE:-task_tracker}?charset=utf8mb4
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      PROJECT_NAME: "Task Tracker & Project Board API"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - task_tracker_net
+
+  # ----------------------------------------------------------------------------
+  # 3. Frontend Service (Next.js App Router + TypeScript + Tailwind CSS)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: task_tracker_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - task_tracker_net
+
+# ------------------------------------------------------------------------------
+# Persistent Volumes
+# ------------------------------------------------------------------------------
+volumes:
+  mysql_data:
+    name: task_tracker_mysql_data
+    driver: local
+
+# ------------------------------------------------------------------------------
+# Custom Isolated Network
+# ------------------------------------------------------------------------------
+networks:
+  task_tracker_net:
+    name: task_tracker_network
+    driver: bridge

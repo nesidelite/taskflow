@@ -1,0 +1,22 @@
+{
+  "development": {
+    "username": "task_user",
+    "password": "task_secure_password_123",
+    "database": "task_tracker",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql"
+  },
+  "docker": {
+    "username": "task_user",
+    "password": "task_secure_password_123",
+    "database": "task_tracker",
+    "host": "db",
+    "port": 3306,
+    "dialect": "mysql"
+  },
+  "production": {
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "mysql"
+  }
+}
