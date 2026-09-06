@@ -7,8 +7,25 @@ import {
   TaskStatus,
 } from "../types";
 
-const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE_URL = rawBase.replace(/\/+$/, "");
+export function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    // When running in the browser in production (not localhost/127.0.0.1),
+    // always use the current origin to route through Nginx reverse proxy (port 443 / SSL)
+    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      return window.location.origin.replace(/\/+$/, "");
+    }
+    const env = process.env.NEXT_PUBLIC_API_URL;
+    if (env && !env.includes(":8000")) {
+      return env.replace(/\/+$/, "");
+    }
+    return "http://localhost:8000";
+  }
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env && !env.includes(":8000")) {
+    return env.replace(/\/+$/, "");
+  }
+  return "http://localhost:8000";
+}
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -31,7 +48,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export const api = {
   async getHealth(): Promise<{ status: string; database?: string }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+      const res = await fetch(`${getApiBaseUrl()}/health`, { cache: "no-store" });
       return await res.json();
     } catch {
       return { status: "offline" };
@@ -39,17 +56,17 @@ export const api = {
   },
 
   async getMetrics(): Promise<DashboardMetrics> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/metrics/`, { cache: "no-store" });
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/metrics/`, { cache: "no-store" });
     return handleResponse<DashboardMetrics>(res);
   },
 
   async getProjects(): Promise<Project[]> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/projects/`, { cache: "no-store" });
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/`, { cache: "no-store" });
     return handleResponse<Project[]>(res);
   },
 
   async createProject(data: ProjectFormData): Promise<Project> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/projects/`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -58,7 +75,7 @@ export const api = {
   },
 
   async updateProject(id: number, data: Partial<ProjectFormData>): Promise<Project> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/projects/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -67,7 +84,7 @@ export const api = {
   },
 
   async deleteProject(id: number): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/projects/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/${id}`, {
       method: "DELETE",
     });
     return handleResponse<{ message: string }>(res);
@@ -86,7 +103,7 @@ export const api = {
     if (filters?.search && filters.search.trim()) params.append("search", filters.search.trim());
 
     const qs = params.toString();
-    const url = qs ? `${API_BASE_URL}/api/v1/tasks/?${qs}` : `${API_BASE_URL}/api/v1/tasks/`;
+    const url = qs ? `${getApiBaseUrl()}/api/v1/tasks/?${qs}` : `${getApiBaseUrl()}/api/v1/tasks/`;
     const res = await fetch(url, { cache: "no-store" });
     return handleResponse<Task[]>(res);
   },
@@ -100,7 +117,7 @@ export const api = {
       project_id: Number(data.project_id),
       due_date: data.due_date && data.due_date.trim() ? data.due_date.trim() : null,
     };
-    const res = await fetch(`${API_BASE_URL}/api/v1/tasks/`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -115,7 +132,7 @@ export const api = {
       body.due_date = null;
     }
 
-    const res = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -124,7 +141,7 @@ export const api = {
   },
 
   async updateTaskStatus(id: number, status: TaskStatus): Promise<Task> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}/status`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -133,7 +150,7 @@ export const api = {
   },
 
   async deleteTask(id: number): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}`, {
       method: "DELETE",
     });
     return handleResponse<{ message: string }>(res);

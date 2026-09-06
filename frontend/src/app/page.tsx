@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Project, Task, DashboardMetrics, TaskStatus, ProjectFormData, TaskFormData } from "../types";
-import { api } from "../lib/api";
+import { api, getApiBaseUrl } from "../lib/api";
 import { Navbar } from "../components/Navbar";
 import { MetricsOverview } from "../components/MetricsOverview";
 import { ProjectBoard } from "../components/ProjectBoard";
@@ -209,7 +209,7 @@ export default function DashboardPage() {
           <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/90 text-rose-800 text-xs sm:text-sm flex items-start gap-3 shadow-xs">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <span className="font-semibold">Servidor Backend Desconectado:</span> No se pudo establecer conexión con el backend en <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">{process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}</code>. Verifica que los contenedores en Docker estén iniciados con <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">docker compose up</code>.
+              <span className="font-semibold">Servidor Backend Desconectado:</span> No se pudo establecer conexión con el backend en <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">{getApiBaseUrl()}</code>. Verifica que los contenedores en Docker estén iniciados con <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">docker compose up</code>.
             </div>
             <button
               onClick={() => loadData()}
