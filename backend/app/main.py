@@ -29,13 +29,24 @@ app = FastAPI(
 )
 
 # CORS Middleware configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+cors_origins = [str(orig).rstrip("/") for orig in settings.CORS_ORIGINS if str(orig).strip()]
+
+if "*" in cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/", tags=["system"])
@@ -47,7 +58,7 @@ def root():
     }
 
 
-@app.get("/health", tags=["system"], status_code=status.HTTP_200_OK)
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["system"], status_code=status.HTTP_200_OK)
 def health_check():
     """Healthcheck endpoint verifying app and database connectivity."""
     db_status = "healthy"
