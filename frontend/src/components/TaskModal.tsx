@@ -1,6 +1,20 @@
+"use client";
+
 import React, { useState, useEffect, useRef } from "react";
 import { Task, Project, TaskFormData, TaskStatus, TaskPriority } from "../types";
-import { X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
+import { CheckSquare } from "lucide-react";
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -32,7 +46,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const prevOpenRef = useRef(false);
 
-  // Initialize form fields ONLY when modal opens or the task being edited changes
+  // Initialize form fields ONLY when modal opens
   useEffect(() => {
     const wasOpen = prevOpenRef.current;
     prevOpenRef.current = isOpen;
@@ -51,21 +65,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setStatus(defaultStatus || "PENDING");
         setPriority("MEDIUM");
         setDueDate("");
-        const initialProjId = defaultProjectId || (projects.length > 0 ? projects[0].id : 0);
+        const initialProjId =
+          defaultProjectId || (projects.length > 0 ? projects[0].id : 0);
         setProjectId(initialProjId);
       }
       setError(null);
     }
   }, [isOpen, task, defaultProjectId, defaultStatus, projects]);
 
-  // Ensure projectId is selected if projects load or if projectId was 0
   useEffect(() => {
-    if (isOpen && !task && (projectId === 0 || !projects.some((p) => p.id === projectId)) && projects.length > 0) {
+    if (
+      isOpen &&
+      !task &&
+      (projectId === 0 || !projects.some((p) => p.id === projectId)) &&
+      projects.length > 0
+    ) {
       setProjectId(defaultProjectId || projects[0].id);
     }
   }, [isOpen, task, projectId, projects, defaultProjectId]);
-
-  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +91,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       return;
     }
 
-    const finalProjectId = projectId || defaultProjectId || (projects.length > 0 ? projects[0].id : 0);
+    const finalProjectId =
+      projectId || defaultProjectId || (projects.length > 0 ? projects[0].id : 0);
     if (!finalProjectId) {
       setError("Debes seleccionar un proyecto. Por favor crea uno primero si no existe.");
       return;
@@ -100,24 +118,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg bg-white rounded-xl shadow-xl border border-zinc-200 overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-zinc-900">
-              {task ? "Editar Tarea" : "Nueva Tarea"}
-            </h3>
-            <p className="text-xs text-zinc-500 mt-0.5">
+        <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-zinc-600" />
+              <span>{task ? "Editar Tarea" : "Nueva Tarea"}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
               Detalla la actividad, estado de ejecución y fecha límite.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-600 p-1 rounded-md transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+            </DialogDescription>
+          </DialogHeader>
         </div>
 
         {/* Form */}
@@ -129,30 +142,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-700 mb-1">
-                Título de la Tarea *
-              </label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="task-title">Título de la Tarea *</Label>
+              <Input
+                id="task-title"
                 type="text"
                 required
                 maxLength={200}
                 placeholder="Ej. Configurar variables de entorno en VPS"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-300 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-colors"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-700 mb-1">
-                Proyecto Asociado *
-              </label>
+            <div className="space-y-1.5">
+              <Label htmlFor="task-project">Proyecto Asociado *</Label>
               <select
+                id="task-project"
                 required
                 value={projectId || (projects.length > 0 ? projects[0].id : 0)}
                 onChange={(e) => setProjectId(Number(e.target.value))}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-colors"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-transparent focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring transition-colors"
               >
                 {projects.length === 0 ? (
                   <option value={0} disabled>
@@ -168,28 +178,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-700 mb-1">
-                Descripción
-              </label>
-              <textarea
+            <div className="space-y-1.5">
+              <Label htmlFor="task-desc">Descripción</Label>
+              <Textarea
+                id="task-desc"
                 rows={3}
                 placeholder="Notas adicionales, requerimientos o detalles de implementación..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-300 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-colors"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">
-                  Estado
-                </label>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-status">Estado</Label>
                 <select
+                  id="task-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                  className="w-full px-2.5 py-1.5 text-xs sm:text-sm rounded-lg border border-zinc-300 bg-white"
+                  className="w-full px-2.5 py-1.5 text-xs sm:text-sm rounded-lg border border-input bg-transparent"
                 >
                   <option value="PENDING">Pendiente</option>
                   <option value="IN_PROGRESS">En Progreso</option>
@@ -197,14 +204,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">
-                  Prioridad
-                </label>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-priority">Prioridad</Label>
                 <select
+                  id="task-priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                  className="w-full px-2.5 py-1.5 text-xs sm:text-sm rounded-lg border border-zinc-300 bg-white"
+                  className="w-full px-2.5 py-1.5 text-xs sm:text-sm rounded-lg border border-input bg-transparent"
                 >
                   <option value="LOW">Baja</option>
                   <option value="MEDIUM">Media</option>
@@ -212,39 +218,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">
-                  Fecha Límite
-                </label>
-                <input
+              <div className="space-y-1.5">
+                <Label htmlFor="task-due">Fecha Límite</Label>
+                <Input
+                  id="task-due"
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs sm:text-sm rounded-lg border border-zinc-300 bg-white"
+                  className="px-2.5 py-1.5 text-xs sm:text-sm"
                 />
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="bg-zinc-50 px-6 py-3.5 flex items-center justify-end gap-2 border-t border-zinc-100">
-            <button
+          <DialogFooter className="bg-zinc-50 px-6 py-3.5 border-t border-zinc-100 gap-2 sm:gap-0">
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-zinc-700 bg-white border border-zinc-300 hover:bg-zinc-100 transition-colors"
+              disabled={loading}
             >
               Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 transition-colors shadow-sm"
-            >
-              {loading ? "Guardando..." : task ? "Actualizar Tarea" : "Crear Tarea"}
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading
+                ? "Guardando..."
+                : task
+                ? "Actualizar Tarea"
+                : "Crear Tarea"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from fastapi import FastAPI, status # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from sqlalchemy import text # type: ignore
 from app.core.config import settings
+from app.core.rate_limit import limiter, RateLimitExceeded, SLOWAPI_AVAILABLE # type: ignore
 from app.db.session import engine, SessionLocal
 from app.db.init_db import init_db
 from app.api.v1.api import api_router
@@ -27,6 +28,20 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+# Wire SlowAPI rate limiter if available
+if SLOWAPI_AVAILABLE and limiter:
+    try:
+        from importlib import import_module
+
+        _rate_limit_exceeded_handler = getattr(
+            import_module("slowapi"),
+            "_rate_limit_exceeded_handler",
+        )
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    except Exception as err:
+        print(f"[RATE LIMIT INIT WARNING] {err}")
 
 # CORS Middleware configuration
 cors_origins = [str(orig).rstrip("/") for orig in settings.CORS_ORIGINS if str(orig).strip()]
