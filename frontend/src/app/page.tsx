@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Project, Task, DashboardMetrics, TaskStatus, ProjectFormData, TaskFormData } from "../types";
+import {
+  Project,
+  Task,
+  DashboardMetrics,
+  TaskStatus,
+  ProjectFormData,
+  TaskFormData,
+  User,
+} from "../types";
 import { api, getApiBaseUrl } from "../lib/api";
 import { Navbar } from "../components/Navbar";
 import { MetricsOverview } from "../components/MetricsOverview";
@@ -9,10 +17,15 @@ import { ProjectBoard } from "../components/ProjectBoard";
 import { ProjectModal } from "../components/ProjectModal";
 import { TaskModal } from "../components/TaskModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { AuthModal } from "../components/AuthModal";
+import { Button } from "../components/ui/button";
 import { RefreshCw, AlertCircle, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
   const [apiStatus, setApiStatus] = useState<"healthy" | "offline" | "loading">("loading");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -43,7 +56,7 @@ export default function DashboardPage() {
     title: "",
   });
 
-  // Load all dashboard data
+  // Load dashboard data based on current user session (or demo content if guest)
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -53,7 +66,7 @@ export default function DashboardPage() {
       const health = await api.getHealth();
       setApiStatus(health.status === "healthy" ? "healthy" : "offline");
 
-      // 2. Fetch concurrent data
+      // 2. Fetch concurrent data (includes token automatically if logged in)
       const [metricsData, projectsData, tasksData] = await Promise.all([
         api.getMetrics().catch((err) => {
           console.error("Error cargando métricas:", err);
@@ -76,7 +89,7 @@ export default function DashboardPage() {
     } catch (err: any) {
       setApiStatus("offline");
       setErrorMessage(
-        "No se pudo conectar con el servidor backend. Asegúrate de que los contenedores de Docker estén activos."
+        "No se pudo conectar con el servidor backend. Asegúrate de que los contenedores estén activos."
       );
     } finally {
       setLoading(false);
@@ -84,24 +97,62 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Check active user session on initial startup
   useEffect(() => {
-    loadData();
-    // Heartbeat every 30s (only when no modal is open to avoid re-render interruptions)
+    api
+      .getMe()
+      .then((user) => {
+        if (user) setCurrentUser(user);
+      })
+      .finally(() => {
+        loadData();
+      });
+  }, [loadData]);
+
+  // Periodic heartbeat every 30s
+  useEffect(() => {
     const timer = setInterval(() => {
-      if (!isProjectModalOpen && !isTaskModalOpen && !confirmDelete.isOpen) {
+      if (
+        !isProjectModalOpen &&
+        !isTaskModalOpen &&
+        !confirmDelete.isOpen &&
+        !isAuthModalOpen
+      ) {
         loadData(true);
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [loadData, isProjectModalOpen, isTaskModalOpen, confirmDelete.isOpen]);
+  }, [loadData, isProjectModalOpen, isTaskModalOpen, confirmDelete.isOpen, isAuthModalOpen]);
+
+  // Auth Actions
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    setSelectedProjectId(null);
+    loadData();
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setCurrentUser(null);
+    setSelectedProjectId(null);
+    loadData();
+  };
 
   // Project Actions
   const handleOpenNewProject = () => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setEditingProject(null);
     setIsProjectModalOpen(true);
   };
 
   const handleEditProject = (project: Project) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setEditingProject(project);
     setIsProjectModalOpen(true);
   };
@@ -118,6 +169,10 @@ export default function DashboardPage() {
   };
 
   const handleDeleteProjectClick = (projectId: number) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const proj = projects.find((p) => p.id === projectId);
     setConfirmDelete({
       isOpen: true,
@@ -129,12 +184,20 @@ export default function DashboardPage() {
 
   // Task Actions
   const handleOpenNewTask = (status: TaskStatus = "PENDING") => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setEditingTask(null);
     setDefaultTaskStatus(status);
     setIsTaskModalOpen(true);
   };
 
   const handleEditTask = (task: Task) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setEditingTask(task);
     setIsTaskModalOpen(true);
   };
@@ -150,22 +213,47 @@ export default function DashboardPage() {
     await loadData(true);
   };
 
+  // Optimistic UI status synchronization with rollback
   const handleStatusChange = async (taskId: number, newStatus: TaskStatus) => {
-    // Optimistic UI update
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    const currentTask = tasks.find((t) => t.id === taskId);
+    if (!currentTask || currentTask.status === newStatus) return;
+
+    const previousStatus = currentTask.status;
+
+    // 1. Optimistic local update (zero-latency, no flickering)
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
+
     try {
+      // 2. Persist in backend
       await api.updateTaskStatus(taskId, newStatus);
       // Reload metrics silently
       const updatedMetrics = await api.getMetrics();
       setMetrics(updatedMetrics);
     } catch (err: any) {
-      loadData(true);
+      console.error("Error sincronizando estado:", err);
+      // 3. Rollback state seamlessly if backend failed
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
+      );
+      alert(
+        err.message ||
+          "No se pudo guardar el cambio de estado en el servidor. Revirtiendo..."
+      );
     }
   };
 
   const handleDeleteTaskClick = (taskId: number) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     const task = tasks.find((t) => t.id === taskId);
     setConfirmDelete({
       isOpen: true,
@@ -194,12 +282,15 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-zinc-900">
-      {/* 1. Header & Navigation */}
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* 1. Header & Navigation with Responsive Mobile Menu */}
       <Navbar
         apiStatus={apiStatus}
+        currentUser={currentUser}
         onOpenNewTask={() => handleOpenNewTask("PENDING")}
         onOpenNewProject={handleOpenNewProject}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* 2. Main Content Container */}
@@ -209,45 +300,79 @@ export default function DashboardPage() {
           <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/90 text-rose-800 text-xs sm:text-sm flex items-start gap-3 shadow-xs">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <span className="font-semibold">Servidor Backend Desconectado:</span> No se pudo establecer conexión con el backend en <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">{getApiBaseUrl()}</code>. Verifica que los contenedores en Docker estén iniciados con <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">docker compose up</code>.
+              <span className="font-semibold">Servidor Backend Desconectado:</span> No se pudo establecer conexión con el backend en <code className="bg-rose-100 px-1 py-0.5 rounded text-rose-900">{getApiBaseUrl()}</code>.
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => loadData()}
-              className="px-3 py-1 bg-white border border-rose-300 hover:bg-rose-100 rounded-md font-medium text-xs text-rose-700"
+              className="bg-white border-rose-300 text-rose-700 hover:bg-rose-100 h-7 text-xs"
             >
               Reintentar
-            </button>
+            </Button>
+          </div>
+        )}
+
+        {/* Demo Mode Notice for Guest Users */}
+        {!currentUser && (
+          <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
+                <Sparkles className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <span className="font-semibold text-zinc-900">Modo Demostración:</span>{" "}
+                <span className="text-zinc-600">
+                  Estás visualizando un tablero de prueba de ejemplo. Inicia sesión o regístrate para comenzar con tus propios proyectos y tareas en blanco.
+                </span>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="h-7 text-xs font-medium shrink-0"
+            >
+              Iniciar Sesión / Registro
+            </Button>
           </div>
         )}
 
         {/* Dashboard Title & Refresh button */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
-              <span>Panel de Control & Tareas</span>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <span>
+                {currentUser
+                  ? `Tablero de ${currentUser.full_name || currentUser.email.split("@")[0]}`
+                  : "Panel de Control & Tareas"}
+              </span>
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-              Monitorea el progreso en tiempo real de tus proyectos y gestiona el flujo de trabajo.
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              {currentUser
+                ? "Tus proyectos y actividades organizadas en tiempo real."
+                : "Organiza, arrastra y monitorea el progreso de tus tareas con sincronización instantánea."}
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => loadData(true)}
               disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-zinc-600 bg-white border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 transition-colors shadow-xs"
+              className="gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground h-8"
               title="Actualizar datos"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-zinc-900" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-foreground" : ""}`} />
               <span>{refreshing ? "Actualizando..." : "Sincronizar"}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* 3. Metrics Overview Cards */}
         <MetricsOverview metrics={metrics} loading={loading} />
 
-        {/* 4. Interactive Project Board */}
+        {/* 4. Interactive Project Board with Drag and Drop */}
         <ProjectBoard
           projects={projects}
           tasks={tasks}
@@ -292,6 +417,12 @@ export default function DashboardPage() {
         isDangerous={true}
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDelete((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
       />
     </div>
   );

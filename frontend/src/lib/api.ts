@@ -5,12 +5,35 @@ import {
   ProjectFormData,
   TaskFormData,
   TaskStatus,
+  User,
+  AuthTokenResponse,
+  LoginPayload,
+  RegisterPayload,
 } from "../types";
+
+const TOKEN_STORAGE_KEY = "taskflow_auth_token";
+
+export function getAuthToken(): string | null {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  }
+  return null;
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  }
+}
+
+export function removeAuthToken(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
+}
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    // When running in the browser in production (not localhost/127.0.0.1),
-    // always use the current origin to route through Nginx reverse proxy (port 443 / SSL)
     if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
       return window.location.origin.replace(/\/+$/, "");
     }
@@ -25,6 +48,17 @@ export function getApiBaseUrl(): string {
     return env.replace(/\/+$/, "");
   }
   return "http://localhost:8000";
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -46,6 +80,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
+  // System Health
   async getHealth(): Promise<{ status: string; database?: string }> {
     try {
       const res = await fetch(`${getApiBaseUrl()}/health`, { cache: "no-store" });
@@ -55,20 +90,79 @@ export const api = {
     }
   },
 
+  // Authentication & Users
+  async register(data: RegisterPayload): Promise<AuthTokenResponse> {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const result = await handleResponse<AuthTokenResponse>(res);
+    setAuthToken(result.access_token);
+    return result;
+  },
+
+  async login(credentials: LoginPayload): Promise<AuthTokenResponse> {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(credentials),
+    });
+    const result = await handleResponse<AuthTokenResponse>(res);
+    setAuthToken(result.access_token);
+    return result;
+  },
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    return handleResponse<{ message: string }>(res);
+  },
+
+  async getMe(): Promise<User | null> {
+    const token = getAuthToken();
+    if (!token) return null;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/me`, {
+        headers: getAuthHeaders(),
+        cache: "no-store",
+      });
+      return await handleResponse<User>(res);
+    } catch {
+      removeAuthToken();
+      return null;
+    }
+  },
+
+  logout(): void {
+    removeAuthToken();
+  },
+
+  // Metrics
   async getMetrics(): Promise<DashboardMetrics> {
-    const res = await fetch(`${getApiBaseUrl()}/api/v1/metrics/`, { cache: "no-store" });
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/metrics/`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
     return handleResponse<DashboardMetrics>(res);
   },
 
+  // Projects
   async getProjects(): Promise<Project[]> {
-    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/`, { cache: "no-store" });
+    const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
     return handleResponse<Project[]>(res);
   },
 
   async createProject(data: ProjectFormData): Promise<Project> {
     const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Project>(res);
@@ -77,7 +171,7 @@ export const api = {
   async updateProject(id: number, data: Partial<ProjectFormData>): Promise<Project> {
     const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Project>(res);
@@ -86,10 +180,12 @@ export const api = {
   async deleteProject(id: number): Promise<{ message: string }> {
     const res = await fetch(`${getApiBaseUrl()}/api/v1/projects/${id}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     });
     return handleResponse<{ message: string }>(res);
   },
 
+  // Tasks
   async getTasks(filters?: {
     projectId?: number;
     status?: string;
@@ -104,7 +200,10 @@ export const api = {
 
     const qs = params.toString();
     const url = qs ? `${getApiBaseUrl()}/api/v1/tasks/?${qs}` : `${getApiBaseUrl()}/api/v1/tasks/`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
     return handleResponse<Task[]>(res);
   },
 
@@ -119,7 +218,7 @@ export const api = {
     };
     const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
     });
     return handleResponse<Task>(res);
@@ -134,7 +233,7 @@ export const api = {
 
     const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
     });
     return handleResponse<Task>(res);
@@ -143,7 +242,7 @@ export const api = {
   async updateTaskStatus(id: number, status: TaskStatus): Promise<Task> {
     const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ status }),
     });
     return handleResponse<Task>(res);
@@ -152,6 +251,7 @@ export const api = {
   async deleteTask(id: number): Promise<{ message: string }> {
     const res = await fetch(`${getApiBaseUrl()}/api/v1/tasks/${id}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     });
     return handleResponse<{ message: string }>(res);
   },

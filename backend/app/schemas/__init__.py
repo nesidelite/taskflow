@@ -1,6 +1,7 @@
 from .project import ProjectBase, ProjectCreate, ProjectUpdate, ProjectRead, ProjectSummary, ProjectWithTasks
 from .task import TaskBase, TaskCreate, TaskUpdate, TaskStatusUpdate, TaskRead
 from .metrics import DashboardMetrics, StatusMetrics, PriorityMetrics
+from .user import UserBase, UserCreate, UserLogin, UserRead, Token, PasswordResetRequest, PasswordResetResponse
 
 __all__ = [
     "ProjectBase",
@@ -17,4 +18,11 @@ __all__ = [
     "DashboardMetrics",
     "StatusMetrics",
     "PriorityMetrics",
+    "UserBase",
+    "UserCreate",
+    "UserLogin",
+    "UserRead",
+    "Token",
+    "PasswordResetRequest",
+    "PasswordResetResponse",
 ]

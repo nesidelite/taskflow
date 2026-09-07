@@ -1,7 +1,7 @@
 import enum
 import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Enum, func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Enum, func # type: ignore
+from sqlalchemy.orm import relationship # type: ignore
 from app.db.base import Base
 
 
@@ -42,11 +42,18 @@ class Task(Base):
         nullable=False,
         index=True,
     )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="tasks", lazy="joined")
+    user = relationship("User", back_populates="tasks", lazy="joined")
 
     def __repr__(self) -> str:
         return f"<Task id={self.id} title='{self.title}' status='{self.status}'>"
