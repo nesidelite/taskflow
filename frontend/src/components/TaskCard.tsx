@@ -1,16 +1,15 @@
 import React from "react";
 import { Task, TaskStatus } from "../types";
 import { PriorityBadge } from "./PriorityBadge";
-import { StatusBadge } from "./StatusBadge";
 import { formatDate, isOverdue } from "../lib/utils";
+import { Button } from "./ui/button";
 import {
   Calendar,
-  MoreVertical,
   Edit2,
   Trash2,
   ArrowRightCircle,
   ArrowLeftCircle,
-  Clock,
+  GripVertical,
 } from "lucide-react";
 
 interface TaskCardProps {
@@ -18,6 +17,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   onDelete: (taskId: number) => void;
   onStatusChange: (taskId: number, newStatus: TaskStatus) => void;
+  isDragging?: boolean;
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
@@ -25,6 +25,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onEdit,
   onDelete,
   onStatusChange,
+  isDragging = false,
 }) => {
   const overdue = isOverdue(task.due_date, task.status);
 
@@ -44,44 +45,69 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const prevStatus = getPrevStatus(task.status);
 
   return (
-    <div className="group bg-white rounded-xl border border-zinc-200/90 hover:border-zinc-300 shadow-xs hover:shadow-md transition-all duration-200 p-4 flex flex-col justify-between gap-3">
-      {/* Header: Project Tag & Actions */}
+    <div
+      className={`group bg-card text-card-foreground rounded-xl border border-border shadow-xs hover:shadow-md transition-all duration-150 p-4 flex flex-col justify-between gap-3 select-none ${
+        isDragging
+          ? "shadow-xl ring-2 ring-primary/25 border-primary/40 rotate-1 scale-[1.02] bg-white cursor-grabbing"
+          : "hover:border-zinc-300 cursor-grab"
+      }`}
+    >
+      {/* Header: Drag Grip, Project Tag & Actions */}
       <div className="flex items-start justify-between gap-2">
-        {task.project ? (
+        <div className="flex items-center gap-1.5 overflow-hidden">
           <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border"
-            style={{
-              backgroundColor: `${task.project.color}15`,
-              borderColor: `${task.project.color}40`,
-              color: task.project.color,
-            }}
+            className="text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0 cursor-grab"
+            title="Arrastra para mover entre estados"
           >
-            <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: task.project.color }}
-            />
-            {task.project.title}
+            <GripVertical className="w-4 h-4" />
           </span>
-        ) : (
-          <span className="text-xs text-zinc-400">Sin proyecto</span>
-        )}
+
+          {task.project ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border truncate"
+              style={{
+                backgroundColor: `${task.project.color}15`,
+                borderColor: `${task.project.color}40`,
+                color: task.project.color,
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: task.project.color }}
+              />
+              <span className="truncate">{task.project.title}</span>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">Sin proyecto</span>
+          )}
+        </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(task)}
+        <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(task);
+            }}
             title="Editar tarea"
-            className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+            className="h-7 w-7 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
           >
             <Edit2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => onDelete(task.id)}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(task.id);
+            }}
             title="Eliminar tarea"
-            className="p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            className="h-7 w-7 text-zinc-400 hover:text-rose-600 hover:bg-rose-50"
           >
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -91,21 +117,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {task.title}
         </h4>
         {task.description && (
-          <p className="text-xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
             {task.description}
           </p>
         )}
       </div>
 
       {/* Meta: Priority & Due Date */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100 text-xs">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/80 text-xs">
         <PriorityBadge priority={task.priority} />
 
         <div
           className={`inline-flex items-center gap-1 text-xs ${
             overdue
               ? "text-rose-600 font-medium bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200"
-              : "text-zinc-500"
+              : "text-muted-foreground"
           }`}
           title={overdue ? "Tarea vencida" : "Fecha límite"}
         >
@@ -114,13 +140,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
 
-      {/* Quick Move Status Footer */}
-      <div className="pt-2 border-t border-zinc-100/70 flex items-center justify-between text-xs text-zinc-500">
+      {/* Quick Move Status Footer: Requirement 3 - Keep Advance/Back buttons */}
+      <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
         <div>
           {prevStatus && (
             <button
-              onClick={() => onStatusChange(task.id, prevStatus)}
-              className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-800 transition-colors text-[11px] font-medium"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStatusChange(task.id, prevStatus);
+              }}
+              className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-900 transition-colors text-[11px] font-medium p-0.5 rounded"
               title={`Mover a ${prevStatus}`}
             >
               <ArrowLeftCircle className="w-3.5 h-3.5" />
@@ -132,8 +162,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         <div>
           {nextStatus && (
             <button
-              onClick={() => onStatusChange(task.id, nextStatus)}
-              className="inline-flex items-center gap-1 text-zinc-700 hover:text-zinc-950 transition-colors text-[11px] font-medium bg-zinc-100 hover:bg-zinc-200 px-2 py-0.5 rounded"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStatusChange(task.id, nextStatus);
+              }}
+              className="inline-flex items-center gap-1 text-zinc-700 hover:text-zinc-950 transition-colors text-[11px] font-medium bg-zinc-100 hover:bg-zinc-200 px-2 py-0.5 rounded shadow-2xs"
               title={`Avanzar a ${nextStatus}`}
             >
               <span>Avanzar</span>

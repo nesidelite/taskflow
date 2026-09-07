@@ -1,6 +1,6 @@
 from typing import Generator
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import create_engine # type: ignore
+from sqlalchemy.orm import sessionmaker, Session # type: ignore
 from app.core.config import settings
 
 # Engine configuration with connection pooling suitable for MySQL
